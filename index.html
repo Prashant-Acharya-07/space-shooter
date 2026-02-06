@@ -1,184 +1,261 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Space Shooter Game</title>
-  <style>
-    body {
-      margin: 0;
-      background: black;
-      overflow: hidden;
-      font-family: Arial, sans-serif;
-    }
+<meta charset="UTF-8">
+<title>Space Shooter Pro</title>
 
-    #game {
-      position: relative;
-      width: 400px;
-      height: 600px;
-      background: radial-gradient(circle at bottom, #020024, #000);
-      margin: 20px auto;
-      border: 2px solid #0ff;
-      overflow: hidden;
-    }
+<style>
+  body {
+    margin: 0;
+    background: black;
+    overflow: hidden;
+    font-family: Arial, sans-serif;
+    color: white;
+    text-align: center;
+  }
 
-    #player {
-      position: absolute;
-      bottom: 10px;
-      left: 180px;
-      width: 40px;
-      height: 40px;
-      background: cyan;
-      clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
-    }
+  #hud {
+    display: flex;
+    justify-content: space-around;
+    padding: 10px;
+  }
 
-    .bullet {
-      position: absolute;
-      width: 4px;
-      height: 12px;
-      background: yellow;
-    }
+  #game {
+    position: relative;
+    width: 400px;
+    height: 600px;
+    margin: auto;
+    border: 2px solid cyan;
+    background: black;
+    overflow: hidden;
+  }
 
-    .enemy {
-      position: absolute;
-      width: 40px;
-      height: 40px;
-      background: red;
-      border-radius: 5px;
-    }
+  /* Star background */
+  .star {
+    position: absolute;
+    width: 2px;
+    height: 2px;
+    background: white;
+  }
 
-    #score {
-      text-align: center;
-      color: white;
-      font-size: 18px;
-    }
+  #player {
+    position: absolute;
+    bottom: 10px;
+    left: 180px;
+    width: 40px;
+    height: 40px;
+    background: cyan;
+    clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
+  }
 
-    #gameOver {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      color: white;
-      font-size: 24px;
-      display: none;
-      text-align: center;
-    }
-  </style>
+  .bullet {
+    position: absolute;
+    width: 4px;
+    height: 12px;
+    background: yellow;
+  }
+
+  .enemy {
+    position: absolute;
+    width: 40px;
+    height: 40px;
+    background: red;
+    border-radius: 6px;
+  }
+
+  #gameOver {
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,0.8);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+  }
+
+  button {
+    padding: 10px 20px;
+    margin-top: 10px;
+    font-size: 16px;
+    cursor: pointer;
+  }
+</style>
 </head>
+
 <body>
 
-<h2 id="score">Score: 0</h2>
+<div id="hud">
+  <div id="score">Score: 0</div>
+  <div id="lives">❤️❤️❤️</div>
+  <div id="highScore">High: 0</div>
+</div>
 
 <div id="game">
   <div id="player"></div>
-  <div id="gameOver">GAME OVER<br>Refresh to Restart</div>
+
+  <div id="gameOver">
+    <h2>GAME OVER</h2>
+    <button onclick="restartGame()">Restart</button>
+  </div>
 </div>
 
+<!-- Sounds -->
+<audio id="shootSound" src="https://cdn.pixabay.com/audio/2022/03/15/audio_2b9f7f6ef6.mp3"></audio>
+<audio id="boomSound" src="https://cdn.pixabay.com/audio/2022/03/15/audio_9f5b8d8f21.mp3"></audio>
+
 <script>
-  const game = document.getElementById("game");
-  const player = document.getElementById("player");
-  const scoreText = document.getElementById("score");
-  const gameOverText = document.getElementById("gameOver");
+const game = document.getElementById("game");
+const player = document.getElementById("player");
+const scoreText = document.getElementById("score");
+const livesText = document.getElementById("lives");
+const highScoreText = document.getElementById("highScore");
+const gameOverScreen = document.getElementById("gameOver");
 
-  let score = 0;
-  let playerX = 180;
-  let gameOver = false;
+const shootSound = document.getElementById("shootSound");
+const boomSound = document.getElementById("boomSound");
 
-  // Move player
-  document.addEventListener("keydown", (e) => {
-    if (gameOver) return;
+let playerX = 180;
+let score = 0;
+let lives = 3;
+let enemySpeed = 2;
+let spawnRate = 1200;
+let gameOver = false;
 
-    if (e.key === "ArrowLeft" && playerX > 0) {
-      playerX -= 20;
-    } else if (e.key === "ArrowRight" && playerX < 360) {
-      playerX += 20;
-    } else if (e.key === " ") {
-      shootBullet();
+let highScore = localStorage.getItem("highScore") || 0;
+highScoreText.textContent = "High: " + highScore;
+
+/* Player movement */
+document.addEventListener("keydown", e => {
+  if (gameOver) return;
+
+  if (e.key === "ArrowLeft" && playerX > 0) playerX -= 20;
+  if (e.key === "ArrowRight" && playerX < 360) playerX += 20;
+  if (e.key === " ") shootBullet();
+
+  player.style.left = playerX + "px";
+});
+
+/* Bullet */
+function shootBullet() {
+  shootSound.currentTime = 0;
+  shootSound.play();
+
+  const bullet = document.createElement("div");
+  bullet.className = "bullet";
+  bullet.style.left = playerX + 18 + "px";
+  bullet.style.bottom = "50px";
+  game.appendChild(bullet);
+
+  const move = setInterval(() => {
+    let y = parseInt(bullet.style.bottom);
+    bullet.style.bottom = y + 10 + "px";
+
+    if (y > 600) {
+      bullet.remove();
+      clearInterval(move);
     }
-    player.style.left = playerX + "px";
-  });
 
-  // Shoot bullet
-  function shootBullet() {
-    const bullet = document.createElement("div");
-    bullet.classList.add("bullet");
-    bullet.style.left = playerX + 18 + "px";
-    bullet.style.bottom = "50px";
-    game.appendChild(bullet);
+    document.querySelectorAll(".enemy").forEach(enemy => {
+      if (isColliding(bullet, enemy)) {
+        boomSound.currentTime = 0;
+        boomSound.play();
 
-    const moveBullet = setInterval(() => {
-      if (gameOver) {
-        clearInterval(moveBullet);
+        enemy.remove();
         bullet.remove();
-        return;
-      }
+        clearInterval(move);
 
-      let bulletBottom = parseInt(bullet.style.bottom);
-      bullet.style.bottom = bulletBottom + 10 + "px";
+        score++;
+        scoreText.textContent = "Score: " + score;
 
-      if (bulletBottom > 600) {
-        clearInterval(moveBullet);
-        bullet.remove();
-      }
-
-      document.querySelectorAll(".enemy").forEach(enemy => {
-        if (isColliding(bullet, enemy)) {
-          enemy.remove();
-          bullet.remove();
-          clearInterval(moveBullet);
-          score++;
-          scoreText.textContent = "Score: " + score;
+        if (score % 5 === 0) {
+          enemySpeed++;
+          spawnRate = Math.max(400, spawnRate - 100);
         }
-      });
-    }, 20);
-  }
-
-  // Create enemies
-  function createEnemy() {
-    if (gameOver) return;
-
-    const enemy = document.createElement("div");
-    enemy.classList.add("enemy");
-    enemy.style.left = Math.random() * 360 + "px";
-    enemy.style.top = "0px";
-    game.appendChild(enemy);
-
-    const moveEnemy = setInterval(() => {
-      if (gameOver) {
-        clearInterval(moveEnemy);
-        enemy.remove();
-        return;
       }
+    });
+  }, 20);
+}
 
-      let enemyTop = parseInt(enemy.style.top);
-      enemy.style.top = enemyTop + 3 + "px";
+/* Enemy */
+function createEnemy() {
+  if (gameOver) return;
 
-      if (isColliding(enemy, player)) {
-        gameOver = true;
-        gameOverText.style.display = "block";
-      }
+  const enemy = document.createElement("div");
+  enemy.className = "enemy";
+  enemy.style.left = Math.random() * 360 + "px";
+  enemy.style.top = "0px";
+  game.appendChild(enemy);
 
-      if (enemyTop > 600) {
-        clearInterval(moveEnemy);
-        enemy.remove();
-      }
-    }, 20);
+  const move = setInterval(() => {
+    let y = parseInt(enemy.style.top);
+    enemy.style.top = y + enemySpeed + "px";
+
+    if (isColliding(enemy, player)) {
+      enemy.remove();
+      clearInterval(move);
+      loseLife();
+    }
+
+    if (y > 600) {
+      enemy.remove();
+      clearInterval(move);
+    }
+  }, 20);
+}
+
+/* Lives */
+function loseLife() {
+  lives--;
+  livesText.textContent = "❤️".repeat(lives);
+
+  if (lives <= 0) endGame();
+}
+
+/* Game over */
+function endGame() {
+  gameOver = true;
+  gameOverScreen.style.display = "flex";
+
+  if (score > highScore) {
+    localStorage.setItem("highScore", score);
+    highScoreText.textContent = "High: " + score;
   }
+}
 
-  // Collision detection
-  function isColliding(a, b) {
-    const rect1 = a.getBoundingClientRect();
-    const rect2 = b.getBoundingClientRect();
+/* Restart */
+function restartGame() {
+  location.reload();
+}
 
-    return !(
-      rect1.top > rect2.bottom ||
-      rect1.bottom < rect2.top ||
-      rect1.right < rect2.left ||
-      rect1.left > rect2.right
-    );
-  }
+/* Stars */
+function createStar() {
+  const star = document.createElement("div");
+  star.className = "star";
+  star.style.left = Math.random() * 400 + "px";
+  star.style.top = "0px";
+  game.appendChild(star);
 
-  setInterval(createEnemy, 1000);
+  const move = setInterval(() => {
+    let y = parseInt(star.style.top);
+    star.style.top = y + 3 + "px";
+
+    if (y > 600) {
+      star.remove();
+      clearInterval(move);
+    }
+  }, 30);
+}
+
+/* Collision */
+function isColliding(a, b) {
+  const r1 = a.getBoundingClientRect();
+  const r2 = b.getBoundingClientRect();
+  return !(r1.right < r2.left || r1.left > r2.right || r1.bottom < r2.top || r1.top > r2.bottom);
+}
+
+/* Game loops */
+setInterval(createEnemy, spawnRate);
+setInterval(createStar, 100);
 </script>
 
 </body>
