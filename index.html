@@ -1,262 +1,198 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
 <meta charset="UTF-8">
-<title>Space Shooter Pro</title>
-
+<title>Zombie Survival Ultimate</title>
 <style>
-  body {
-    margin: 0;
-    background: black;
-    overflow: hidden;
-    font-family: Arial, sans-serif;
-    color: white;
-    text-align: center;
-  }
-
-  #hud {
-    display: flex;
-    justify-content: space-around;
-    padding: 10px;
-  }
-
-  #game {
-    position: relative;
-    width: 400px;
-    height: 600px;
-    margin: auto;
-    border: 2px solid cyan;
-    background: black;
-    overflow: hidden;
-  }
-
-  /* Star background */
-  .star {
-    position: absolute;
-    width: 2px;
-    height: 2px;
-    background: white;
-  }
-
-  #player {
-    position: absolute;
-    bottom: 10px;
-    left: 180px;
-    width: 40px;
-    height: 40px;
-    background: cyan;
-    clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
-  }
-
-  .bullet {
-    position: absolute;
-    width: 4px;
-    height: 12px;
-    background: yellow;
-  }
-
-  .enemy {
-    position: absolute;
-    width: 40px;
-    height: 40px;
-    background: red;
-    border-radius: 6px;
-  }
-
-  #gameOver {
-    position: absolute;
-    inset: 0;
-    background: rgba(0,0,0,0.8);
-    display: none;
-    align-items: center;
-    justify-content: center;
-    flex-direction: column;
-  }
-
-  button {
-    padding: 10px 20px;
-    margin-top: 10px;
-    font-size: 16px;
-    cursor: pointer;
-  }
+body{margin:0;background:#000;color:#fff;font-family:Arial;text-align:center}
+#hud{display:flex;justify-content:space-around;padding:6px;background:#111}
+canvas{border:2px solid lime;display:block;margin:auto;background:#050505}
+#shop,#pause,#gameover{
+  position:fixed;inset:0;display:none;
+  background:rgba(0,0,0,.85);color:#fff
+}
+.panel{margin-top:80px}
+button{padding:10px 20px;margin:6px;font-size:16px;cursor:pointer}
 </style>
 </head>
-
 <body>
 
 <div id="hud">
-  <div id="score">Score: 0</div>
-  <div id="lives">❤️❤️❤️</div>
-  <div id="highScore">High: 0</div>
+  <div id="hp">❤️100 🛡️0</div>
+  <div id="weapon">Pistol</div>
+  <div id="wave">Wave 1</div>
+  <div id="score">Score 0</div>
 </div>
 
-<div id="game">
-  <div id="player"></div>
+<canvas id="game" width="900" height="520"></canvas>
 
-  <div id="gameOver">
-    <h2>GAME OVER</h2>
-    <button onclick="restartGame()">Restart</button>
+<div id="shop">
+  <div class="panel">
+    <h2>WEAPON SHOP</h2>
+    <button onclick="upgrade('damage')">Upgrade Damage</button>
+    <button onclick="upgrade('rate')">Upgrade Fire Rate</button>
+    <button onclick="upgrade('hp')">Buy Health</button><br>
+    <button onclick="closeShop()">Close</button>
   </div>
 </div>
 
-<!-- Sounds -->
-<audio id="shootSound" src="https://cdn.pixabay.com/audio/2022/03/15/audio_2b9f7f6ef6.mp3"></audio>
-<audio id="boomSound" src="https://cdn.pixabay.com/audio/2022/03/15/audio_9f5b8d8f21.mp3"></audio>
+<div id="pause"><div class="panel"><h2>PAUSED</h2><button onclick="togglePause()">Resume</button></div></div>
+<div id="gameover"><div class="panel"><h1>GAME OVER</h1><button onclick="location.reload()">Restart</button></div></div>
 
 <script>
-const game = document.getElementById("game");
-const player = document.getElementById("player");
-const scoreText = document.getElementById("score");
-const livesText = document.getElementById("lives");
-const highScoreText = document.getElementById("highScore");
-const gameOverScreen = document.getElementById("gameOver");
+/* CORE */
+const c=document.getElementById("game"),x=c.getContext("2d");
+let keys={},paused=false,score=0,wave=1;
+let bullets=[],zombies=[],particles=[];
+let saved=JSON.parse(localStorage.getItem("zombieSave")||"{}");
 
-const shootSound = document.getElementById("shootSound");
-const boomSound = document.getElementById("boomSound");
+/* PLAYER */
+const player={
+  x:450,y:260,r:15,hp:saved.hp||100,shield:0,
+  speed:3,weapon:saved.weapon||"pistol",
+  dmg:saved.dmg||20,rate:saved.rate||250
+};
 
-let playerX = 180;
-let score = 0;
-let lives = 3;
-let enemySpeed = 2;
-let spawnRate = 1200;
-let gameOver = false;
+/* INPUT */
+onkeydown=e=>{
+  keys[e.key]=true;
+  if(e.key=="b")openShop();
+  if(e.key=="p")togglePause();
+  if(e.key=="1")player.weapon="pistol";
+  if(e.key=="2")player.weapon="rifle";
+  if(e.key=="3")player.weapon="shotgun";
+};
+onkeyup=e=>keys[e.key]=false;
+c.onclick=e=>shoot(e);
 
-let highScore = localStorage.getItem("highScore") || 0;
-highScoreText.textContent = "High: " + highScore;
+/* GAME LOOP */
+function loop(){
+  if(!paused){
+    update();
+    draw();
+  }
+  requestAnimationFrame(loop);
+}
+loop();
 
-/* Player movement */
-document.addEventListener("keydown", e => {
-  if (gameOver) return;
+/* UPDATE */
+function update(){
+  movePlayer();moveBullets();moveZombies();collide();
+  if(!zombies.length)spawnWave();
+}
 
-  if (e.key === "ArrowLeft" && playerX > 0) playerX -= 20;
-  if (e.key === "ArrowRight" && playerX < 360) playerX += 20;
-  if (e.key === " ") shootBullet();
+/* PLAYER MOVE */
+function movePlayer(){
+  if(keys.w||keys.ArrowUp)player.y-=player.speed;
+  if(keys.s||keys.ArrowDown)player.y+=player.speed;
+  if(keys.a||keys.ArrowLeft)player.x-=player.speed;
+  if(keys.d||keys.ArrowRight)player.x+=player.speed;
+}
 
-  player.style.left = playerX + "px";
-});
-
-/* Bullet */
-function shootBullet() {
-  shootSound.currentTime = 0;
-  shootSound.play();
-
-  const bullet = document.createElement("div");
-  bullet.className = "bullet";
-  bullet.style.left = playerX + 18 + "px";
-  bullet.style.bottom = "50px";
-  game.appendChild(bullet);
-
-  const move = setInterval(() => {
-    let y = parseInt(bullet.style.bottom);
-    bullet.style.bottom = y + 10 + "px";
-
-    if (y > 600) {
-      bullet.remove();
-      clearInterval(move);
-    }
-
-    document.querySelectorAll(".enemy").forEach(enemy => {
-      if (isColliding(bullet, enemy)) {
-        boomSound.currentTime = 0;
-        boomSound.play();
-
-        enemy.remove();
-        bullet.remove();
-        clearInterval(move);
-
-        score++;
-        scoreText.textContent = "Score: " + score;
-
-        if (score % 5 === 0) {
-          enemySpeed++;
-          spawnRate = Math.max(400, spawnRate - 100);
-        }
-      }
+/* SHOOT */
+let last=0;
+function shoot(e){
+  let now=Date.now();
+  if(now-last<player.rate)return;
+  last=now;
+  let a=Math.atan2(e.offsetY-player.y,e.offsetX-player.x);
+  let count=player.weapon=="shotgun"?5:1;
+  for(let i=0;i<count;i++){
+    bullets.push({
+      x:player.x,y:player.y,
+      vx:Math.cos(a+(i-2)*.15)*8,
+      vy:Math.sin(a+(i-2)*.15)*8
     });
-  }, 20);
-}
-
-/* Enemy */
-function createEnemy() {
-  if (gameOver) return;
-
-  const enemy = document.createElement("div");
-  enemy.className = "enemy";
-  enemy.style.left = Math.random() * 360 + "px";
-  enemy.style.top = "0px";
-  game.appendChild(enemy);
-
-  const move = setInterval(() => {
-    let y = parseInt(enemy.style.top);
-    enemy.style.top = y + enemySpeed + "px";
-
-    if (isColliding(enemy, player)) {
-      enemy.remove();
-      clearInterval(move);
-      loseLife();
-    }
-
-    if (y > 600) {
-      enemy.remove();
-      clearInterval(move);
-    }
-  }, 20);
-}
-
-/* Lives */
-function loseLife() {
-  lives--;
-  livesText.textContent = "❤️".repeat(lives);
-
-  if (lives <= 0) endGame();
-}
-
-/* Game over */
-function endGame() {
-  gameOver = true;
-  gameOverScreen.style.display = "flex";
-
-  if (score > highScore) {
-    localStorage.setItem("highScore", score);
-    highScoreText.textContent = "High: " + score;
   }
 }
 
-/* Restart */
-function restartGame() {
-  location.reload();
+/* BULLETS */
+function moveBullets(){
+  bullets.forEach(b=>{b.x+=b.vx;b.y+=b.vy});
+  bullets=bullets.filter(b=>b.x>0&&b.y>0&&b.x<c.width&&b.y<c.height);
 }
 
-/* Stars */
-function createStar() {
-  const star = document.createElement("div");
-  star.className = "star";
-  star.style.left = Math.random() * 400 + "px";
-  star.style.top = "0px";
-  game.appendChild(star);
+/* ZOMBIES */
+function spawnWave(){
+  wave++;
+  document.getElementById("wave").innerText="Wave "+wave;
+  for(let i=0;i<wave+3;i++)
+    zombies.push({
+      x:Math.random()*c.width,
+      y:Math.random()*c.height,
+      hp:40+wave*5,
+      sp:1+wave*.1,
+      r:15
+    });
+  if(wave%5==0)spawnBoss();
+}
+function spawnBoss(){
+  zombies.push({x:0,y:0,hp:500,sp:.7,r:40,boss:true});
+}
+function moveZombies(){
+  zombies.forEach(z=>{
+    let a=Math.atan2(player.y-z.y,player.x-z.x);
+    z.x+=Math.cos(a)*z.sp;
+    z.y+=Math.sin(a)*z.sp;
+  });
+}
 
-  const move = setInterval(() => {
-    let y = parseInt(star.style.top);
-    star.style.top = y + 3 + "px";
-
-    if (y > 600) {
-      star.remove();
-      clearInterval(move);
+/* COLLISION */
+function collide(){
+  zombies.forEach((z,zi)=>{
+    bullets.forEach((b,bi)=>{
+      if(Math.hypot(z.x-b.x,z.y-b.y)<z.r){
+        z.hp-=player.dmg;
+        bullets.splice(bi,1);
+        if(z.hp<=0){
+          zombies.splice(zi,1);
+          score+=z.boss?200:10;
+        }
+      }
+    });
+    if(Math.hypot(z.x-player.x,z.y-player.y)<z.r+player.r){
+      player.hp-=.4;
+      if(player.hp<=0)endGame();
     }
-  }, 30);
+  });
+  document.getElementById("hp").innerText=`❤️${player.hp|0} 🛡️${player.shield}`;
+  document.getElementById("score").innerText=`Score ${score}`;
 }
 
-/* Collision */
-function isColliding(a, b) {
-  const r1 = a.getBoundingClientRect();
-  const r2 = b.getBoundingClientRect();
-  return !(r1.right < r2.left || r1.left > r2.right || r1.bottom < r2.top || r1.top > r2.bottom);
+/* DRAW */
+function draw(){
+  x.clearRect(0,0,c.width,c.height);
+  x.fillStyle="cyan";
+  x.beginPath();x.arc(player.x,player.y,player.r,0,7);x.fill();
+  x.fillStyle="yellow";
+  bullets.forEach(b=>x.fillRect(b.x,b.y,4,4));
+  zombies.forEach(z=>{
+    x.fillStyle=z.boss?"purple":"red";
+    x.beginPath();x.arc(z.x,z.y,z.r,0,7);x.fill();
+  });
 }
 
-/* Game loops */
-setInterval(createEnemy, spawnRate);
-setInterval(createStar, 100);
+/* SHOP */
+function openShop(){paused=true;shop.style.display="block"}
+function closeShop(){paused=false;shop.style.display="none"}
+function upgrade(t){
+  if(t=="damage")player.dmg+=5;
+  if(t=="rate")player.rate=Math.max(80,player.rate-30);
+  if(t=="hp")player.hp=Math.min(100,player.hp+20);
+}
+
+/* PAUSE */
+function togglePause(){
+  paused=!paused;
+  pause.style.display=paused?"block":"none";
+}
+
+/* GAME OVER */
+function endGame(){
+  localStorage.setItem("zombieSave",JSON.stringify(player));
+  gameover.style.display="block";
+  paused=true;
+}
 </script>
-
 </body>
 </html>
