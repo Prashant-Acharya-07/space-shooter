@@ -1,1 +1,185 @@
 <h1> hello beautiful ppl......</h1>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Space Shooter Game</title>
+  <style>
+    body {
+      margin: 0;
+      background: black;
+      overflow: hidden;
+      font-family: Arial, sans-serif;
+    }
+
+    #game {
+      position: relative;
+      width: 400px;
+      height: 600px;
+      background: radial-gradient(circle at bottom, #020024, #000);
+      margin: 20px auto;
+      border: 2px solid #0ff;
+      overflow: hidden;
+    }
+
+    #player {
+      position: absolute;
+      bottom: 10px;
+      left: 180px;
+      width: 40px;
+      height: 40px;
+      background: cyan;
+      clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
+    }
+
+    .bullet {
+      position: absolute;
+      width: 4px;
+      height: 12px;
+      background: yellow;
+    }
+
+    .enemy {
+      position: absolute;
+      width: 40px;
+      height: 40px;
+      background: red;
+      border-radius: 5px;
+    }
+
+    #score {
+      text-align: center;
+      color: white;
+      font-size: 18px;
+    }
+
+    #gameOver {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: white;
+      font-size: 24px;
+      display: none;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+
+<h2 id="score">Score: 0</h2>
+
+<div id="game">
+  <div id="player"></div>
+  <div id="gameOver">GAME OVER<br>Refresh to Restart</div>
+</div>
+
+<script>
+  const game = document.getElementById("game");
+  const player = document.getElementById("player");
+  const scoreText = document.getElementById("score");
+  const gameOverText = document.getElementById("gameOver");
+
+  let score = 0;
+  let playerX = 180;
+  let gameOver = false;
+
+  // Move player
+  document.addEventListener("keydown", (e) => {
+    if (gameOver) return;
+
+    if (e.key === "ArrowLeft" && playerX > 0) {
+      playerX -= 20;
+    } else if (e.key === "ArrowRight" && playerX < 360) {
+      playerX += 20;
+    } else if (e.key === " ") {
+      shootBullet();
+    }
+    player.style.left = playerX + "px";
+  });
+
+  // Shoot bullet
+  function shootBullet() {
+    const bullet = document.createElement("div");
+    bullet.classList.add("bullet");
+    bullet.style.left = playerX + 18 + "px";
+    bullet.style.bottom = "50px";
+    game.appendChild(bullet);
+
+    const moveBullet = setInterval(() => {
+      if (gameOver) {
+        clearInterval(moveBullet);
+        bullet.remove();
+        return;
+      }
+
+      let bulletBottom = parseInt(bullet.style.bottom);
+      bullet.style.bottom = bulletBottom + 10 + "px";
+
+      if (bulletBottom > 600) {
+        clearInterval(moveBullet);
+        bullet.remove();
+      }
+
+      document.querySelectorAll(".enemy").forEach(enemy => {
+        if (isColliding(bullet, enemy)) {
+          enemy.remove();
+          bullet.remove();
+          clearInterval(moveBullet);
+          score++;
+          scoreText.textContent = "Score: " + score;
+        }
+      });
+    }, 20);
+  }
+
+  // Create enemies
+  function createEnemy() {
+    if (gameOver) return;
+
+    const enemy = document.createElement("div");
+    enemy.classList.add("enemy");
+    enemy.style.left = Math.random() * 360 + "px";
+    enemy.style.top = "0px";
+    game.appendChild(enemy);
+
+    const moveEnemy = setInterval(() => {
+      if (gameOver) {
+        clearInterval(moveEnemy);
+        enemy.remove();
+        return;
+      }
+
+      let enemyTop = parseInt(enemy.style.top);
+      enemy.style.top = enemyTop + 3 + "px";
+
+      if (isColliding(enemy, player)) {
+        gameOver = true;
+        gameOverText.style.display = "block";
+      }
+
+      if (enemyTop > 600) {
+        clearInterval(moveEnemy);
+        enemy.remove();
+      }
+    }, 20);
+  }
+
+  // Collision detection
+  function isColliding(a, b) {
+    const rect1 = a.getBoundingClientRect();
+    const rect2 = b.getBoundingClientRect();
+
+    return !(
+      rect1.top > rect2.bottom ||
+      rect1.bottom < rect2.top ||
+      rect1.right < rect2.left ||
+      rect1.left > rect2.right
+    );
+  }
+
+  setInterval(createEnemy, 1000);
+</script>
+
+</body>
+</html>
